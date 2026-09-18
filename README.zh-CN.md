@@ -127,6 +127,8 @@ make all VER=21 BOOT_SIZE=64 DATA_SIZE=4096
 
 ### 构建变量
 
+全部 makefile 变量的详细说明见 [MAKEFILE_VARS.md](MAKEFILE_VARS.md)。最常用的几个：
+
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `VER` | `14` | 目标发行版，决定 ISO 选择、initrd 补丁与压缩方式 |
@@ -261,6 +263,7 @@ cp device_files/oemvars*.txt flash/device_files/
 ```
 .
 ├── makefile                 # 整个构建系统
+├── MAKEFILE_VARS.md         # 全部 make 变量的详细说明
 ├── device_files/            # 设备专用输入
 │   ├── gpt.ini, gpt_ini2bin.py   # 分区表定义与生成脚本
 │   ├── grub.cfg                  # GRUB 模板（替换后写入 boot.img）

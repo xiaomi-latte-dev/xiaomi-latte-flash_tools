@@ -132,6 +132,9 @@ Products are written to `images-<VER>/` (e.g. `make VER=21` → `images-21/`).
 
 ### Build variables
 
+See [MAKEFILE_VARS.md](MAKEFILE_VARS.md) for the full, detailed reference of every makefile
+variable. The most useful ones:
+
 | Variable | Default | Description |
 | --- | --- | --- |
 | `VER` | `14` | Target release, drives ISO selection, initrd patch and compression |
@@ -269,6 +272,7 @@ cp device_files/oemvars*.txt flash/device_files/
 ```
 .
 ├── makefile                 # the entire build system
+├── MAKEFILE_VARS.md         # detailed reference for every make variable
 ├── device_files/            # device-specific inputs
 │   ├── gpt.ini, gpt_ini2bin.py   # partition table definition + generator
 │   ├── grub.cfg                  # GRUB template (substituted into boot.img)
