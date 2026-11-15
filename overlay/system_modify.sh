@@ -77,6 +77,13 @@ if [ -f "$USB_CONFIGFS_RC" ]; then
 fi
 echo "Config usb configfs done."
 
+# 删除虚拟相机
+VIRT_CAM="system/vendor/bin/hw/android.hardware.camera.provider@2.4-service-google"
+if [ -f "$VIRT_CAM" ];then
+    rm -rf "system/vendor/etc/init/android.hardware.camera.provider@2.4-service-google.rc"
+    rm -rf "$VIRT_CAM"
+fi
+
 # 删除不必要的应用
 echo "Removing unnecessary apps..."
 # BlissOS
@@ -96,7 +103,7 @@ rm -rf "system/product/etc/permissions/com.android.contacts.xml"
 rm -rf "system/product/priv-app/Dialer"
 rm -rf "system/product/etc/permissions/com.android.dialer.xml"
 # 触摸屏校准 ProjectSakura 附带
-rm -rf system/priv-app/TSCalibration2
+rm -rf "system/priv-app/TSCalibration2"
 # 桌面启动器
 rm -rf "system/priv-app/com.farmerbb.taskbar" # ProjectSakura
 rm -rf "system/etc/permissions/privapp-permissions-com.farmerbb.taskbar.xml"

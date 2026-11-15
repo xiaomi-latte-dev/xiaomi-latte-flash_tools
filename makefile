@@ -3,6 +3,9 @@ ifeq ($(V),0)
 .SILENT:
 endif
 
+# 不带参数直接 make 等于完整构建
+.DEFAULT_GOAL := all
+
 # LineageOS 21.1	为 Android 14 6.12.30-zenith
 # LineageOS 17.1	为 Android 10 5.8.0-android-x86_64-93451-g2eba2073e8a6
 # ProjectSakura-5.2	为 Android 11 5.10.61-GoogleLTS-xanmod1-pledge
