@@ -89,6 +89,25 @@ OVERLAY_BOOT_DIR := $(OVERLAY_DIR)/boot
 OVERLAY_SYSTEM_DIR := $(OVERLAY_DIR)/system
 OVERLAY_DATA_DIR := $(OVERLAY_DIR)/data
 
+# 音频 HAL 修复（XRUN 恢复 + 高水位）。原 HAL 在欠载后陷入 -EPIPE 循环，
+# 播放约 20 分钟必然断音（50ms 风暴）。产物来自 ../libaudio-xrun-fix（源码
+# android-generic/platform_hardware_libaudio 对应分支 + 0001/0002 补丁），
+# 位数与安装路径按系统不同，因此按 VER 映射而非进 system_modify.sh（该脚本
+# 所有版本共用）。无产物映射的 VER 跳过安装。
+AUDIO_HAL_DIR := $(DEVICE_FILES_DIR)/audio-hal
+ifeq ($(VER),v14)
+AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/v14.so
+AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+else ifeq ($(VER),sk5)
+AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/sk5.so
+AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+else ifeq ($(VER),v16)
+AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/v16.so
+AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+else ifeq ($(VER),los21)
+AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/los21.so
+AUDIO_HAL_PATH := /vendor/lib64/hw/audio.primary.x86.so
+endif
 
 # Fedora 44 的 EFI/BOOT 目录直接提供 EFI 文件，无需解包 rpm。
 # 注意该目录没有 fbx64.efi（Fedora 43 的 rpm 里有），因此不再安装它。
@@ -353,7 +372,7 @@ $(SYSTEM_UNCOMP_FILE): $(ISO_STAMP) | $(SYSTEM_UNCOMP_DIR)
 	echo "解包system.img:" "完成"
 unpack_system: $(SYSTEM_UNCOMP_FILE)
 $(SYSTEM_FILE): $(OVERLAY_SYSTEM_DIR) $(SYSTEM_UNCOMP_FILE) $(KERNEL_STAMP) $(KEY_REMAP_PROG) \
-				$(DROPBEAR_FILE) $(SSH_KEY_PUB) | $(SYSTEM_DIR) $(IMAGES_DIR)
+				$(DROPBEAR_FILE) $(SSH_KEY_PUB) $(AUDIO_HAL_FILE) | $(SYSTEM_DIR) $(IMAGES_DIR)
 	echo "修改system"
 	if grep -q "$(SYSTEM_DIR)" /proc/mounts;then $(UMOUNT) "$(SYSTEM_DIR)";fi
 	$(MOUNT) -o loop "$(SYSTEM_UNCOMP_FILE)" "$(SYSTEM_DIR)"
@@ -366,6 +385,12 @@ $(SYSTEM_FILE): $(OVERLAY_SYSTEM_DIR) $(SYSTEM_UNCOMP_FILE) $(KERNEL_STAMP) $(KE
 
 	cd "$(SYSTEM_DIR)"; if [ -f "$(OVERLAY_DIR)/system_modify.sh" ]; then sudo sh "$(OVERLAY_DIR)/system_modify.sh"; fi
 	$(CP) -r "$(OVERLAY_SYSTEM_DIR)/"* "$(SYSTEM_DIR)" || echo OVERLAY_SYSTEM_DIR为空, 跳过复制.
+
+	if [ -n "$(AUDIO_HAL_FILE)" ]; then \
+		$(INSTALL) -Dm755 "$(AUDIO_HAL_FILE)" "$(SYSTEM_DIR)$(AUDIO_HAL_PATH)"; \
+	else \
+		echo "VER=$(VER) 无音频 HAL 修复产物, 跳过"; \
+	fi
 
 	if [ -z "$(HAVE_DROPBEAR)" ];then \
 		$(INSTALL) --strip -Dm755 "$(DROPBEAR_FILE)" "$(SYSTEM_DIR)/system/bin/dropbear";\
