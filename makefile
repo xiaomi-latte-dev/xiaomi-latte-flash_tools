@@ -16,18 +16,40 @@ endif
 # BlissOS-Zenith 16	为 Android 13 6.9.9-zenith
 # BlissOS-Zenith17.2为 Android 14 6.7.10-zenith-xanmod1
 # BlissOS 18.4		为 Android 15 6.6.89-crimson-xanmod1
-VER_LIST := 17.1 5 14 15 16 17.2 18 21
-VER ?= 14
+# 系统标识命名：BlissOS 为 v<大版本>（v14/v15/v16/v17/v18，17 对应 17.2）；
+# Lineage 为 los<版本>（los17=17.1，los21）；Sakura 为 sk<版本>（sk5）。
+VER_LIST := los17 sk5 v14 v15 v16 v17 los21 v18
+VER ?= v14
 # 判断输入版本是否在范围内
 ifeq ($(filter $(VER),$(VER_LIST)),)
 $(error "VER must be one of $(VER_LIST)")
 endif
 
-NO_SUPPORT_EROFS_LIST := 17 5
+# 数字版本：ISO 文件名匹配与 device_files/initrd-<num>*.patch 沿用旧数字命名。
+ifeq ($(VER),los17)
+VER_NUM := 17.1
+else ifeq ($(VER),sk5)
+VER_NUM := 5
+else ifeq ($(VER),v14)
+VER_NUM := 14
+else ifeq ($(VER),v15)
+VER_NUM := 15
+else ifeq ($(VER),v16)
+VER_NUM := 16
+else ifeq ($(VER),v17)
+VER_NUM := 17.2
+else ifeq ($(VER),los21)
+VER_NUM := 21
+else ifeq ($(VER),v18)
+VER_NUM := 18
+endif
+
+# 注：原表里的 "17" 因 filter 词匹配从未命中 17.1/17.2，按意图归到 los17。
+NO_SUPPORT_EROFS_LIST := los17 sk5
 RAW_SYSTEM_IMAGE_LIST := 
 HAVE_DROPBEAR := n
 IMPORT_RECOVERY := n
-NEW_DATA_MOUNT_LIST := 17.2 18 21
+NEW_DATA_MOUNT_LIST := v17 v18 los21
 ifeq ($(filter $(VER),$(NEW_DATA_MOUNT_LIST)),)
 NEW_DATA_MOUNT := n
 else
@@ -66,6 +88,7 @@ OVERLAY_DIR := $(PWD)/overlay
 OVERLAY_BOOT_DIR := $(OVERLAY_DIR)/boot
 OVERLAY_SYSTEM_DIR := $(OVERLAY_DIR)/system
 OVERLAY_DATA_DIR := $(OVERLAY_DIR)/data
+
 
 # Fedora 44 的 EFI/BOOT 目录直接提供 EFI 文件，无需解包 rpm。
 # 注意该目录没有 fbx64.efi（Fedora 43 的 rpm 里有），因此不再安装它。
@@ -116,10 +139,10 @@ clean_kenrel:
 	$(RM) "$(KERNEL_DIR)" "$(KERNEL_STAMP)"
 .PHONY: unpack_kenrel clean_kenrel
 
-ifeq ($(VER),5)
-ISO_FILE := $(wildcard ProjectSakura-$(VER).*.iso)
+ifeq ($(VER),sk5)
+ISO_FILE := $(wildcard ProjectSakura-$(VER_NUM).*.iso)
 else
-ISO_FILE := $(wildcard *$(VER)*-*.iso)
+ISO_FILE := $(wildcard *$(VER_NUM)*-*.iso)
 endif
 ISO_FILE := $(firstword $(ISO_FILE))
 ISO_STAMP := $(ISO_DIR)/.stamp
@@ -140,10 +163,10 @@ $(DSDT_FILE): $(DEVICE_FILES_DIR)/dsdt.dsl
 INITRD_FILE := $(BUILD_DIR)/initrd-$(VER).cpio.gz
 INITRD_STAMP := $(BUILD_DIR)/.initrd-$(VER).stamp
 ifeq ($(NEW_DATA_MOUNT),y)
-INITRD_PATCH_FILE := $(DEVICE_FILES_DIR)/initrd-$(VER)-d.patch
+INITRD_PATCH_FILE := $(DEVICE_FILES_DIR)/initrd-$(VER_NUM)-d.patch
 endif
 ifeq ($(wildcard $(INITRD_PATCH_FILE)),)
-INITRD_PATCH_FILE := $(DEVICE_FILES_DIR)/initrd-$(VER).patch
+INITRD_PATCH_FILE := $(DEVICE_FILES_DIR)/initrd-$(VER_NUM).patch
 endif
 ifeq ($(wildcard $(INITRD_PATCH_FILE)),)
 INITRD_PATCH_FILE := $(DEVICE_FILES_DIR)/initrd.patch
