@@ -1,6 +1,0 @@
-# sshd
-service sshd /system/bin/dropbear -F -D /system/etc/dropbear
-    class main
-    user root
-    group root shell log readproc
-    restart

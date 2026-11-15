@@ -6,29 +6,6 @@ service mipad2_key_remap /system/bin/key-remap
     # 必须有 input 权限才能访问 /dev/input/event*
     disabled
     oneshot
-    # 在输入设备初始化完成后启动
-    start-delay 2
-
-service udc /system/bin/udc.sh
-    class main
-    user root
-    group root
-    oneshot
-
-service dnsmasq_rndis /system/bin/dnsmasq \
-    --no-daemon \
-    --interface=usb0 \
-    --bind-interfaces \
-    --dhcp-range=192.168.255.2,192.168.255.254,12h \
-    --dhcp-option=3,192.168.255.1 \
-    --log-queries \
-    --no-resolv \
-    --log-facility=/dev/log
-    class main
-    user root
-    group root net_admin inet
-    disabled
-    oneshot
 
 # 在 sys.boot_completed 后启动（更保险）
 on property:sys.boot_completed=1

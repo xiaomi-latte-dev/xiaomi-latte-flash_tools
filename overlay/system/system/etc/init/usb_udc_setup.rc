@@ -1,0 +1,17 @@
+# UDC 前置：建 gadget、挂 FunctionFS、把 sys.usb.configfs 置 1。
+#
+# 必须早于 adbd。adbd 由 init.usb.rc 的 legacy 分支
+# (sys.usb.config=adb && sys.usb.configfs=0) 在 ~10.3s 拉起，
+# 那时 FunctionFS 还没挂载，adbd 打不开 ep0 就静默跳过 USB。
+#
+# 用 on early-fs：此时 /config 的 configfs 已挂载，且远比 adbd 启动早。
+# 脚本内部还有等待 configfs 就绪的循环，双保险。
+service usb_udc_setup /system/bin/usb_udc_setup.sh
+    class core
+    user root
+    group root
+    oneshot
+    disabled
+
+on early-fs
+    start usb_udc_setup

@@ -40,8 +40,9 @@ ro.product.locale=zh-CN
 ro.sf.lcd_density=320
 # 默认开启无线ADB
 service.adb.tcp.port=5555
-# 开启USB配置文件系统, 从传统sys配置转为configfs
-sys.usb.configfs=1
+# 不要在这里写 sys.usb.configfs。build.prop 只接受 ro.* / persist.* 前缀，
+# sys.* 会被属性系统忽略（Android 11+），写进来也读不到，反而让人以为已配置。
+# 该值改由 usb_udc_setup.sh 在 ffs 挂载完成后用 setprop 设置。
 $MARKER_END
 EOF
 fi
@@ -56,6 +57,25 @@ ROOT_FSTAB=`ls fstab.*`
 # VENDOR_FSTAB="system/vendor/etc/fstab.internal.x86"
 # [ -f "$VENDOR_FSTAB" ] && sed -i '/mmc/d' "$VENDOR_FSTAB"
 echo "Config fstab done."
+
+echo "Config usb configfs ..."
+# MTP 的 gadget function 名对不上。
+#
+# Android 的 MTP 和 adb 一样走用户态 FunctionFS，内核没有 f_mtp.c。configfs
+# 只接受 "ffs.<instance>" 形式的目录名，所以 MTP 的 function 实际是 ffs.mtp；
+# 但 init.usb.configfs.rc 里 symlink 的源路径写死为 functions/mtp.gs0，
+# 系统里也没有任何组件去创建它，结果是：
+#   - symlink 静默失败，configs/b.1/f1 不存在
+#   - UDC 照样被写入，sys.usb.state 显示 "mtp"，看起来正常
+#   - 实际上 MTP 完全没有功能，mtpd 也不会起来
+# configfs 不允许在 functions/ 下建软链接（Operation not permitted），
+# 所以只能把 rc 里的路径改成实际存在的 ffs.mtp。
+USB_CONFIGFS_RC="system/etc/init/hw/init.usb.configfs.rc"
+if [ -f "$USB_CONFIGFS_RC" ]; then
+    sed -i 's|functions/mtp\.gs0|functions/ffs.mtp|g' "$USB_CONFIGFS_RC"
+    echo "  已把 mtp.gs0 改为 ffs.mtp: $(grep -c 'functions/ffs\.mtp' "$USB_CONFIGFS_RC") 处"
+fi
+echo "Config usb configfs done."
 
 # 删除不必要的应用
 echo "Removing unnecessary apps..."

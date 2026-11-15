@@ -64,25 +64,42 @@ OVERLAY_BOOT_DIR := $(OVERLAY_DIR)/boot
 OVERLAY_SYSTEM_DIR := $(OVERLAY_DIR)/system
 OVERLAY_DATA_DIR := $(OVERLAY_DIR)/data
 
-SHIM_URL := https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/Packages/s/shim-x64-15.8-3.x86_64.rpm
-GRUB2_EFI_URL := https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/Packages/g/grub2-efi-x64-2.12-40.fc43.x86_64.rpm
+# Fedora 44 的 EFI/BOOT 目录直接提供 EFI 文件，无需解包 rpm。
+# 注意该目录没有 fbx64.efi（Fedora 43 的 rpm 里有），因此不再安装它。
+SHIM_BASE_URL := https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/x86_64/os/EFI/BOOT
 
-SHIM_FILE := $(O)/shim-x64.rpm
-GRUB2_EFI_FILE := $(O)/grub2-efi-x64.rpm
-$(SHIM_FILE): | $(O)
-	wget --quiet "$(SHIM_URL)" -O "$@"
-$(GRUB2_EFI_FILE): | $(O)
-	wget --quiet "$(GRUB2_EFI_URL)" -O "$@"
+SHIM_BOOTX64 := $(SHIM_GRUB_DIR)/BOOTX64.EFI
+SHIM_GRUBX64 := $(SHIM_GRUB_DIR)/grubx64.efi
+SHIM_MMX64 := $(SHIM_GRUB_DIR)/mmx64.efi
+
+$(SHIM_BOOTX64) $(SHIM_GRUBX64) $(SHIM_MMX64): | $(SHIM_GRUB_DIR)
+	# 先下到临时文件再改名：wget 中断会留下截断文件。直接写目标会让 make 把
+	# 截断文件当成已完成，后续签名和引导都基于坏文件。
+	TMP_DL="$@.part"; \
+	rm -f "$$TMP_DL"; \
+	wget --quiet "$(SHIM_BASE_URL)/$(@F)" -O "$$TMP_DL"; \
+	[ -s "$$TMP_DL" ] || { echo "下载失败: $@" >&2; rm -f "$$TMP_DL"; exit 1; }; \
+	mv -f "$$TMP_DL" "$@"
+
+# shim 在 .vendor_cert 段内嵌 fedoraca 证书，这是它信任 grub 的依据。
+# 用它判断 grub 是否有「shim 认可的签名」，避免被本机系统密钥环（通常没有
+# fedoraca）误判成未签名，从而每次都不必要地重签。
+SHIM_VENDOR_CERT := $(SHIM_GRUB_DIR)/vendor.pem
+$(SHIM_VENDOR_CERT): $(SHIM_BOOTX64) | $(SHIM_GRUB_DIR)
+	./scripts/shim-vendor-cert.sh "$(SHIM_BOOTX64)" "$@"
+
+# Secure Boot 下 shim 会校验内核签名，内核必须用本仓库 MOK 签过。
+MOK_KEY := $(DEVICE_FILES_DIR)/MOK.key
+MOK_CERT := $(DEVICE_FILES_DIR)/MOK.crt
 
 SHIM_GRUB_STAMP := $(BUILD_DIR)/.shim-grub.stamp
-$(SHIM_GRUB_STAMP): $(SHIM_FILE) $(GRUB2_EFI_FILE) | $(SHIM_GRUB_DIR)
-	echo "解包shim文件"
-	rpm2cpio $(SHIM_FILE) | cpio -idm -D "$(SHIM_GRUB_DIR)"
-	rpm2cpio $(GRUB2_EFI_FILE) | cpio -idm -D "$(SHIM_GRUB_DIR)"
+$(SHIM_GRUB_STAMP): $(SHIM_BOOTX64) $(SHIM_GRUBX64) $(SHIM_MMX64) | $(SHIM_GRUB_DIR)
 	touch $@
-	echo "解包shim文件:" "完成"
 unpack_shim_grub: $(SHIM_GRUB_STAMP)
-.PHONY: unpack_shim_grub
+clean_shim_grub:
+	$(RM) "$(SHIM_GRUB_STAMP)"
+	$(RM) -r "$(SHIM_GRUB_DIR)"
+.PHONY: unpack_shim_grub clean_shim_grub
 
 KERNEL_PACKAGE_FILE := $(wildcard kernel-*-zenith.tar.gz)
 KERNEL_STAMP := $(KERNEL_DIR)/.stamp
@@ -156,18 +173,48 @@ clean_initrd:
 
 GRUB_CFG_TEMPLATE := $(DEVICE_FILES_DIR)/grub.cfg
 BOOT_FILE := $(IMAGES_DIR)/boot.img
-$(BOOT_FILE): $(OVERLAY_BOOT_DIR) $(SHIM_GRUB_STAMP) $(INITRD_FILE) $(KERNEL_STAMP) $(GRUB_CFG_TEMPLATE) | $(IMAGES_DIR) $(BOOT_DIR)
+$(BOOT_FILE): $(OVERLAY_BOOT_DIR) $(SHIM_GRUB_STAMP) $(SHIM_VENDOR_CERT) $(INITRD_FILE) $(KERNEL_STAMP) $(GRUB_CFG_TEMPLATE) | $(IMAGES_DIR) $(BOOT_DIR)
 	echo "打包boot.img"
 	if grep -q "$(BOOT_DIR)" /proc/mounts;then $(UMOUNT) "$(BOOT_DIR)";fi
 	sudo truncate -s $(BOOT_SIZE)M "$@"
 	$(CHOWN) $(UID):$(GID) "$@"
 	mkfs.vfat -F 32 -n ESP "$@"
 	$(MOUNT) -o loop "$@" "$(BOOT_DIR)"
-	$(INSTALL) -D "$(SHIM_GRUB_DIR)/boot/efi/EFI/BOOT/BOOTX64.EFI" "$(BOOT_DIR)/EFI/boot/bootx64.efi"
-	$(INSTALL) -D "$(SHIM_GRUB_DIR)/boot/efi/EFI/fedora/mmx64.efi" "$(BOOT_DIR)/EFI/boot/mmx64.efi"
-	$(INSTALL) -D "$(SHIM_GRUB_DIR)/boot/efi/EFI/fedora/grubx64.efi" "$(BOOT_DIR)/EFI/boot/grubx64.efi"
+	# shim 与 MOK 管理器：保持微软签名，不能重签。
+	$(INSTALL) -D "$(SHIM_BOOTX64)" "$(BOOT_DIR)/EFI/boot/bootx64.efi"
+	$(INSTALL) -D "$(SHIM_MMX64)" "$(BOOT_DIR)/EFI/boot/mmx64.efi"
+	# GRUB：官方 grubx64.efi 由 fedoraca 签名，配套 shim 可直接加载，此时原样
+	# 拷贝；只有签名不被 shim 认可（或压根没签名）时才用本仓库 MOK 重签。
+	# 注意不能用无参数的 sbverify 判断——它查的是本机系统密钥环，通常没有
+	# fedoraca，会把官方签名误判为无效。
+	GRUB_SRC="$(SHIM_GRUBX64)"; GRUB_DST="$(BUILD_DIR)/grubx64.efi"; \
+	if command -v sbverify >/dev/null 2>&1 && [ -f "$(SHIM_VENDOR_CERT)" ] && \
+	   sbverify --cert "$(SHIM_VENDOR_CERT)" "$$GRUB_SRC" >/dev/null 2>&1; then \
+		echo "grubx64.efi 已由 fedoraca 签名，原样拷贝" >&2; \
+		cp -f "$$GRUB_SRC" "$$GRUB_DST"; \
+	elif command -v sbsign >/dev/null 2>&1 && [ -f "$(MOK_KEY)" ] && [ -f "$(MOK_CERT)" ]; then \
+		echo "grubx64.efi 未被 shim 认可，使用 MOK 重签" >&2; \
+		sbsign --key "$(MOK_KEY)" --cert "$(MOK_CERT)" --output "$$GRUB_DST" "$$GRUB_SRC"; \
+	else \
+		echo "警告：grubx64.efi 签名不可用，Secure Boot 下无法引导" >&2; \
+		cp -f "$$GRUB_SRC" "$$GRUB_DST"; \
+	fi
+	$(INSTALL) -D "$(BUILD_DIR)/grubx64.efi" "$(BOOT_DIR)/EFI/boot/grubx64.efi"
 	$(INSTALL) -D "$(INITRD_FILE)" "$(BOOT_DIR)/EFI/BlissOS/initrd.cpio.gz"
-	$(INSTALL) -D "$(KERNEL_DIR)"/vmlinuz-* "$(BOOT_DIR)/EFI/BlissOS/vmlinuz"
+	# 内核：Secure Boot 下 shim 会校验内核签名，必须由本仓库 MOK 签过。
+	KSRC=$(KERNEL_DIR)/vmlinuz-*; KIMG="$(BUILD_DIR)/vmlinuz"; \
+	if command -v sbverify >/dev/null 2>&1 && [ -f "$(MOK_CERT)" ] && \
+	   sbverify --cert "$(MOK_CERT)" $$KSRC >/dev/null 2>&1; then \
+		echo "内核已有有效 MOK 签名，复用" >&2; \
+		cp -f $$KSRC "$$KIMG"; \
+	elif command -v sbsign >/dev/null 2>&1 && [ -f "$(MOK_KEY)" ] && [ -f "$(MOK_CERT)" ]; then \
+		echo "内核未签名或签名不匹配，使用 MOK 重签" >&2; \
+		sbsign --key "$(MOK_KEY)" --cert "$(MOK_CERT)" --output "$$KIMG" $$KSRC; \
+	else \
+		echo "警告：sbsign 或 MOK 密钥缺失，内核未签名，Secure Boot 下无法引导" >&2; \
+		cp -f $$KSRC "$$KIMG"; \
+	fi
+	$(INSTALL) -D "$(BUILD_DIR)/vmlinuz" "$(BOOT_DIR)/EFI/BlissOS/vmlinuz"
 	[ "$(IMPORT_RECOVERY)" = "y" ] && $(INSTALL) -D "$(ISO_DIR)"/ramdisk-recovery.img "$(BOOT_DIR)/EFI/BlissOS/ramdisk-recovery.img" || true
 	$(CP) -r "$(OVERLAY_BOOT_DIR)"/* "$(BOOT_DIR)"
 	new_data_mount=$(NEW_DATA_MOUNT) envsubst '$$new_data_mount' < "$(GRUB_CFG_TEMPLATE)" | sudo tee "$(BOOT_DIR)/EFI/BlissOS/grub.cfg" > /dev/null;
@@ -216,9 +263,31 @@ clean_data: umount_data
 	$(RM) "$(DATA_FILE)" "$(IMAGES_DIR)/data.simg"
 .PHONY: data.img mount_data umount_data clean_data
 
+# key-remap 必须用 NDK（bionic）编译，不能用主机 gcc -static。
+#
+# 主机 glibc 的静态库带 IFUNC 变体，其中包含 AVX/AVX2 实现。Mi Pad 2 的
+# Airmont（Atom x5-Z8500）连 AVX 都不支持，一旦 glibc 的 IFUNC 选错实现，
+# 进程启动后立刻 SIGILL —— 连最简的 printf 都会崩。这不是 -march 能解决的：
+# -march 只影响本文件生成的指令，libc.a 是预编译机器码，编译器不会再动它；
+# 静态链接下 GLIBC_TUNABLES 也来不及在 _dl_start 的 IFUNC 解析前生效。
+#
+# NDK 的 bionic 没有 IFUNC，基线就是 x86-64，strip 后约 713K（比 glibc 版更小）。
+NDK_ROOT ?= /opt/android-ndk
+NDK_HOST_TAG ?= linux-x86_64
+NDK_BIN := $(NDK_ROOT)/toolchains/llvm/prebuilt/$(NDK_HOST_TAG)/bin
+NDK_CC := $(NDK_BIN)/x86_64-linux-android21-clang
+NDK_STRIP := $(NDK_BIN)/llvm-strip
+
 KEY_REMAP_PROG := $(BUILD_DIR)/key-remap
 $(KEY_REMAP_PROG): $(DEVICE_FILES_DIR)/mipad2_keymap.c | $(BUILD_DIR)
-	gcc -o "$@" "$<" -static
+	@[ -x "$(NDK_CC)" ] || { \
+		echo "错误: 找不到 $(NDK_CC)" >&2; \
+		echo "请安装 Android NDK，或用 NDK_ROOT=... 指定路径。" >&2; \
+		echo "不要改用 gcc -static：主机 glibc 会用 AVX 指令，本机启动即 SIGILL。" >&2; \
+		exit 1; \
+	}
+	"$(NDK_CC)" -O2 -Wall -o "$@" "$<" -static
+	"$(NDK_STRIP)" --strip-all "$@"
 
 DROPBEAR_URL := https://github.com/ribbons/android-dropbear/releases/latest/download/dropbear-x86_64-linux-android.zip
 DROPBEAR_ZIP := $(O)/dropbear-x86_64-linux-android.zip
@@ -277,7 +346,7 @@ $(SYSTEM_FILE): $(OVERLAY_SYSTEM_DIR) $(SYSTEM_UNCOMP_FILE) $(KERNEL_STAMP) $(KE
 		$(INSTALL) -Dm755 "$(SSH_KEY_PUB)" "$(SYSTEM_DIR)/system/etc/dropbear/authorized_keys";\
 	else \
 		$(RM) -rf "$(SYSTEM_DIR)/system/etc/dropbear";\
-		$(RM) -rf "$(SYSTEM_DIR)/system/etc/init/sshd.rc";\
+		$(RM) -rf "$(SYSTEM_DIR)/system/etc/init/udc.latte.rc";\
 	fi
 
 	$(CHMOD) -R 755 "$(SYSTEM_DIR)/"
@@ -318,11 +387,8 @@ clean: umount_boot umount_system umount_data
 	$(RM) $(BUILD_DIR)
 clean_images:
 	$(RM) $(IMAGES_DIR)
-clean_images_all:
+clean_all: clean
 	$(RM) $(O)/images*/
-clean_all: clean clean_images_all
-	$(RM) $(SHIM_FILE) $(GRUB2_EFI_FILE)
-	$(RM) $(DEVICE_FILES_DIR)/dsdt.{aml,hex}
 .PHONY: clean clean_images clean_all
 
 flash_gpt: $(GPT_FILE)
@@ -414,7 +480,11 @@ dnx.7z: all
 .PHONY: dnx.7z
 
 # 文件夹创建目标自动生成
-DIR_VARS := $(filter %_DIR,$(.VARIABLES)) $(O)
-ALL_DIRS := $(foreach v,$(DIR_VARS),$($(v)))
+# 注意 $(.VARIABLES) 会包含环境变量：构建环境里若存在 *_DIR 形式的变量
+# （例如 SHELDON_DATA_DIR、XDG_RUNTIME_DIR），它们的值会被当成目标路径，
+# 既会触发"目标在同一个规则中给出了多次"的警告，也会让 make 去创建项目
+# 目录之外的系统目录。所以只保留项目根目录下的路径，并用 sort 去重。
+DIR_VARS := $(filter %_DIR,$(.VARIABLES))
+ALL_DIRS := $(sort $(filter $(O)/%,$(foreach v,$(DIR_VARS),$($(v)))) $(O))
 $(ALL_DIRS):
 	mkdir -p $@
