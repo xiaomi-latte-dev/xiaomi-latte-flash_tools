@@ -28,7 +28,7 @@
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `V` | `0` | 输出详细程度。`V=0` 时启用 `.SILENT:`，只显示 `echo` 的进度信息；`V=1` 时打印每条实际执行的命令，便于调试。 |
-| `VER` | `14` | **目标发行版本**，是本项目的核心开关，决定源 ISO、initrd 补丁、system 压缩算法、data 挂载方式等。取值必须属于 `VER_LIST`（见下），否则 make 直接报错。 |
+| `VER` | `v14` | **目标发行版本**，是本项目的核心开关，决定源 ISO、initrd 补丁、system 压缩算法、data 挂载方式等。取值必须属于 `VER_LIST`（见下），否则 make 直接报错。 |
 | `BOOT_SIZE` | `64` | `boot.img` 大小，单位 **MiB**。该镜像被格式化为 FAT32 并标记为 ESP。 |
 | `DATA_SIZE` | `2048` | `data.img` 大小，单位 **MiB**。 |
 
@@ -48,7 +48,8 @@ make all VER=21 BOOT_SIZE=64 DATA_SIZE=4096
 允许的 `VER` 取值（内部 `:=`）：
 
 ```make
-VER_LIST := 17.1 5 14 15 16 17.2 18 21
+VER_LIST := los17 sk5 v14 v15 v16 v17 los21 v18
+# 命名：BlissOS v<大版本>（v17 对应 17.2）；Lineage los<版本>（los17=17.1）；Sakura sk<版本>。
 ```
 
 makefile 会校验：
@@ -59,18 +60,26 @@ $(error "VER must be one of $(VER_LIST)")
 endif
 ```
 
+### `VER_NUM`
+
+由 `VER` 派生的数字版本（内部 `:=`）：`los17`→`17.1`、`sk5`→`5`、`v14`→`14`、
+`v15`→`15`、`v16`→`16`、`v17`→`17.2`、`los21`→`21`、`v18`→`18`。
+
+用于两处沿用旧数字命名的场合：源 ISO 文件名通配匹配，以及
+`device_files/initrd-<数字>*.patch` 补丁文件选择。
+
 各取值对应的发行版与内核（来自 makefile 顶部注释）：
 
 | `VER` | 发行版 | Android | 内核 |
 | --- | --- | --- | --- |
 | `17.1` | LineageOS 17.1 | 10 | `5.8.0-android-x86_64-93451-g2eba2073e8a6` |
-| `5` | ProjectSakura 5.2 | 11 | `5.10.61-GoogleLTS-xanmod1-pledge` |
-| `14` | BlissOS 14.10.3 / 14.10.4 | 11 | `6.1.112-gloria-xanmod1` / `6.6.102-crimson-xanmod1` |
+| `sk5` | ProjectSakura 5.2 | 11 | `5.10.61-GoogleLTS-xanmod1-pledge` |
+| `v14` | BlissOS 14.10.3 / 14.10.4 | 11 | `6.1.112-gloria-xanmod1` / `6.6.102-crimson-xanmod1` |
 | `15` | BlissOS 15 | 12 | `6.1.112-gloria-xanmod1` |
-| `16` | BlissOS 16 / Zenith 16 | 13 | `6.1.112-gloria-xanmod1` / `6.9.9-zenith` |
+| `v16` | BlissOS 16 / Zenith 16 | 13 | `6.1.112-gloria-xanmod1` / `6.9.9-zenith` |
 | `17.2` | BlissOS Zenith 17.2 | 14 | `6.7.10-zenith-xanmod1` |
 | `18` | BlissOS 18.4 | 15 | `6.6.89-crimson-xanmod1` |
-| `21` | LineageOS 21.1 | 14 | `6.12.30-zenith` |
+| `los21` | LineageOS 21.1 | 14 | `6.12.30-zenith` |
 
 ### `NO_SUPPORT_EROFS_LIST`
 
@@ -131,6 +140,33 @@ NEW_DATA_MOUNT_LIST := 17.2 18 21
 1. **initrd 补丁选择**：优先使用 `initrd-$(VER)-d.patch`（`-d` 后缀）。
 2. **GRUB 内核参数**：`new_data_mount=y` 经 `envsubst` 传入 `grub.cfg`。
 3. **QEMU 内核参数**：使用 `DATA=nodata data_part=/dev/vdb`，否则 `DATA=/dev/vdb`。
+
+---
+
+### `AUDIO_HAL_DIR` / `AUDIO_HAL_FILE` / `AUDIO_HAL_PATH`
+
+按 `VER` 映射的音频 HAL 修复产物（XRUN 恢复 + 高水位，修复播放约 20 分钟
+后断音的 50ms `-EPIPE` 风暴）：
+
+```make
+AUDIO_HAL_DIR := $(DEVICE_FILES_DIR)/audio-hal
+ifeq ($(VER),14)
+AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/v14.so
+AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+...
+```
+
+| VER | 产物 | 位数/分支 | 镜像内路径 |
+| --- | --- | --- | --- |
+| v14 | `v14.so` | 32 位 `11-x86` | `/lib/hw/` |
+| sk5 | `sk5.so` | 32 位 `11-x86` | `/lib/hw/` |
+| v16 | `v16.so` | 32 位 `13-x86` | `/lib/hw/` |
+| los21 | `los21.so` | 64 位 `14-x86` | `/vendor/lib64/hw/` |
+
+- `system.img` 打包时安装到 `$(SYSTEM_DIR)$(AUDIO_HAL_PATH)`；未映射的 VER
+  （15/17.2/18，本机无 ISO）跳过并打印提示。
+- `AUDIO_HAL_FILE` 是 `system.img` 的依赖，产物更新后自动重打包。
+- 产物构建见 `../libaudio-xrun-fix/build.sh <profile>`（NDK 独立编译）。
 
 ---
 
@@ -214,8 +250,8 @@ endif
 ISO_FILE := $(firstword $(ISO_FILE))
 ```
 
-- `VER=5` 特例：匹配 `ProjectSakura-5.*.iso`。
-- 其他版本：匹配 `*<VER>*-*.iso`，例如 `VER=14` → `Bliss-v14.10.3-x86_64-OFFICIAL-foss-20241012.iso`。
+- `VER=sk5` 特例：匹配 `ProjectSakura-$(VER_NUM).*.iso`。
+- 其他版本：按 `VER_NUM`（数字版本）匹配 `*<VER_NUM>*-*.iso`，例如 `v14`→14 → `Bliss-v14.10.4-….iso`，`los17`→17.1 → `lineage-17.1-….iso`。
 - `$(firstword ...)` 取**第一个**匹配项。若同名规则下有多个 ISO，结果取决于文件系统通配排序——建议只保留一个匹配文件。
 
 ### `INITRD_PATCH_FILE` 的选择顺序
@@ -353,7 +389,7 @@ $(ALL_DIRS):
 ## 10. 用法示例
 
 ```bash
-# 用默认 VER=14 构建全部产物
+# 用默认 VER=v14 构建全部产物
 make
 
 # 指定版本并显示完整命令

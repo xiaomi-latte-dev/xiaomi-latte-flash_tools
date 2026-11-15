@@ -54,8 +54,8 @@ pattern, so the names must match:
 
 | File | Pattern | Notes |
 | --- | --- | --- |
-| Source ISO | `*<VER>*-*.iso` | e.g. `Bliss-v14.10.3-x86_64-OFFICIAL-foss-20241012.iso` for `VER=14` |
-| Source ISO (`VER=5`) | `ProjectSakura-5.*.iso` | special-cased in the makefile |
+| Source ISO | `*<VER>*-*.iso` | e.g. `Bliss-v14.10.3-x86_64-OFFICIAL-foss-20241012.iso` for `VER=v14` |
+| Source ISO (`VER=sk5`) | `ProjectSakura-5.*.iso` | special-cased in the makefile |
 | Kernel package | `kernel-*-zenith.tar.gz` | extracts `lib/modules/<kernel>` |
 | shim RPM | `shim-x64.rpm` | downloaded automatically if missing |
 | grub2 RPM | `grub2-efi-x64.rpm` | downloaded automatically if missing |
@@ -67,7 +67,7 @@ Example downloads:
 - `zenith` kernels: <https://github.com/Qs315490/android-x86-kernel-latte/actions>
 
 ```bash
-# BlissOS 14.10.3 example (VER=14)
+# BlissOS 14.10.3 example (VER=v14)
 wget -O Bliss-v14.10.3-x86_64-OFFICIAL-foss-20241012.iso \
   "https://sourceforge.net/projects/blissos-x86/files/Official/BlissOS14/FOSS/Generic/Bliss-v14.10.3-x86_64-OFFICIAL-foss-20241012.iso/download"
 
@@ -112,23 +112,23 @@ This project lays down an alternative UEFI boot path inside `boot.img`:
 ## Build
 
 ```bash
-# Build every image (gpt.bin, boot.img, system.img, data.img) for the default VER=14
+# Build every image (gpt.bin, boot.img, system.img, data.img) for the default VER=v14
 make
 
 # Pick a specific release
-make all VER=21
+make all VER=los21
 
 # Show the full command lines
-make all VER=21 V=1
+make all VER=los21 V=1
 ```
 
 Override the image sizes when needed:
 
 ```bash
-make all VER=21 BOOT_SIZE=64 DATA_SIZE=4096
+make all VER=los21 BOOT_SIZE=64 DATA_SIZE=4096
 ```
 
-Products are written to `images-<VER>/` (e.g. `make VER=21` → `images-21/`).
+Products are written to `images-<VER>/` (e.g. `make VER=21` → `images-los21/`).
 
 ### Build variables
 
@@ -237,7 +237,7 @@ layout next to itself:
 To assemble that folder from a Linux build:
 
 ```bash
-make all VER=21
+make all VER=los21
 mkdir -p flash/images flash/device_files
 cp DNX_flash_*.bat flash/
 cp images-21/gpt.bin images-21/boot.img images-21/system.img images-21/data.img flash/images/
