@@ -97,16 +97,16 @@ OVERLAY_DATA_DIR := $(OVERLAY_DIR)/data
 AUDIO_HAL_DIR := $(DEVICE_FILES_DIR)/audio-hal
 ifeq ($(VER),v14)
 AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/v14.so
-AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+AUDIO_HAL_PATH := /system/lib/hw/audio.primary.x86.so
 else ifeq ($(VER),sk5)
 AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/sk5.so
-AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+AUDIO_HAL_PATH := /system/lib/hw/audio.primary.x86.so
 else ifeq ($(VER),v16)
 AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/v16.so
-AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
+AUDIO_HAL_PATH := /system/lib/hw/audio.primary.x86.so
 else ifeq ($(VER),los21)
 AUDIO_HAL_FILE := $(AUDIO_HAL_DIR)/los21.so
-AUDIO_HAL_PATH := /vendor/lib64/hw/audio.primary.x86.so
+AUDIO_HAL_PATH := /system/vendor/lib64/hw/audio.primary.x86.so
 endif
 
 # Fedora 44 的 EFI/BOOT 目录直接提供 EFI 文件，无需解包 rpm。

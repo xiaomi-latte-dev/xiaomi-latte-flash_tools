@@ -158,10 +158,10 @@ AUDIO_HAL_PATH := /lib/hw/audio.primary.x86.so
 
 | VER | 产物 | 位数/分支 | 镜像内路径 |
 | --- | --- | --- | --- |
-| v14 | `v14.so` | 32 位 `11-x86` | `/lib/hw/` |
-| sk5 | `sk5.so` | 32 位 `11-x86` | `/lib/hw/` |
-| v16 | `v16.so` | 32 位 `13-x86` | `/lib/hw/` |
-| los21 | `los21.so` | 64 位 `14-x86` | `/vendor/lib64/hw/` |
+| v14 | `v14.so` | 32 位 `11-x86` | `/system/lib/hw/` |
+| sk5 | `sk5.so` | 32 位 `11-x86` | `/system/lib/hw/` |
+| v16 | `v16.so` | 32 位 `13-x86` | `/system/lib/hw/` |
+| los21 | `los21.so` | 64 位 `14-x86` | `/system/vendor/lib64/hw/` |
 
 - `system.img` 打包时安装到 `$(SYSTEM_DIR)$(AUDIO_HAL_PATH)`；未映射的 VER
   （15/17.2/18，本机无 ISO）跳过并打印提示。
